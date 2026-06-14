@@ -1,0 +1,8 @@
+# build output
+rootfs.tar.zst
+rootfs.tar.zst.bak
+mjs/
+tmp/
+
+# emacs undo-tree
+.*.~undo-tree~

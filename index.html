@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Try miso — Haskell web framework running in WebAssembly</title>
+    <meta name="description" content="Try miso, a tasty Haskell web framework, live in your browser. Write and run Haskell code compiled to WebAssembly — no install required." />
+    <meta name="keywords" content="miso, Haskell, WebAssembly, wasm, GHC, functional programming, web framework, browser, interactive, playground" />
+    <meta name="author" content="dmjio" />
+    <meta property="og:title" content="Try miso — Haskell web framework running in WebAssembly" />
+    <meta property="og:description" content="Write and run miso Haskell apps live in your browser, compiled to WebAssembly via GHC. No install required." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Try miso — Haskell in WebAssembly" />
+    <meta name="twitter:description" content="Write and run miso Haskell apps live in your browser, compiled to WebAssembly via GHC. No install required." />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/modern-normalize/modern-normalize.min.css"
+    />
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: #0f172a;
+        color: #e5e7eb;
+        display: flex;
+        flex-direction: column;
+      }
+      .topbar {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid #1f2937;
+        flex-shrink: 0;
+      }
+      .topbar h1 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .topbar p {
+        margin: 0;
+        font-size: 0.78rem;
+        color: #6b7280;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .app {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        gap: 0.5rem;
+        padding: 0.5rem;
+      }
+      @media (min-width: 800px) {
+        .app {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      @media (max-width: 799.98px) {
+        .app {
+          grid-template-rows: 1fr 1fr;
+        }
+      }
+      .pane {
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      header {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid #1f2937;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      #runBtn {
+        background: #22c55e;
+        border: none;
+        border-radius: 8px;
+        padding: 0.3rem 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 0.85rem;
+      }
+      #editor {
+        flex: 1;
+        min-height: 0;
+      }
+      .right {
+        padding: 0.6rem;
+      }
+      .outputs {
+        display: block;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.4; }
+      }
+      .loading {
+        padding: 1rem;
+        color: #6b7280;
+        font-size: 0.9rem;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+      .outputs .label {
+        font-size: 0.85rem;
+        opacity: 0.8;
+        margin: 0.35rem 0;
+      }
+      .outputs textarea {
+        display: block;
+        width: 100%;
+        min-height: 20vh;
+        background: #0b1020;
+        color: #d1fae5;
+        border: 1px solid #223;
+        border-radius: 8px;
+        padding: 0.6rem;
+        resize: vertical;
+        box-sizing: border-box;
+      }
+      #app {
+        display: block;
+        width: 100%;
+        min-height: 30vh;
+        background: #0b1020;
+        color: #d1fae5;
+        border: 1px solid #223;
+        border-radius: 8px;
+        padding: 0.6rem;
+        box-sizing: border-box;
+        overflow: auto;
+      }
+    </style>
+
+    <script async type="module">
+      import * as monaco from "https://cdn.jsdelivr.net/npm/monaco-editor/+esm";
+      import {
+        ConsoleStdout,
+        File,
+        OpenFile,
+        PreopenDirectory,
+        WASI,
+      } from "https://esm.sh/gh/haskell-wasm/browser_wasi_shim";
+      import { DyLDBrowserHost, main } from "./dyld.mjs";
+
+      monaco.languages.register({ id: "haskell" });
+      monaco.languages.setMonarchTokensProvider("haskell", {
+        keywords: [
+          "module", "where", "import", "qualified", "as", "hiding",
+          "data", "newtype", "type", "class", "instance", "deriving",
+          "let", "in", "do", "case", "of", "if", "then", "else",
+          "infixl", "infixr", "infix", "forall", "foreign",
+        ],
+        tokenizer: {
+          root: [
+            [/\{-#/, "keyword.control", "@pragma"],
+            [/\{-/, "comment", "@blockComment"],
+            [/--.*$/, "comment"],
+            [/"/, "string", "@string"],
+            [/'[^'\\]'/, "string"],
+            [/'\\.'/, "string"],
+            [/0x[0-9a-fA-F]+/, "number"],
+            [/\d+(\.\d+)?([eE][+-]?\d+)?/, "number"],
+            [/[A-Z][a-zA-Z0-9_']*/, "type.identifier"],
+            [/[a-z_][a-zA-Z0-9_']*/, { cases: { "@keywords": "keyword", "@default": "identifier" } }],
+            [/[=<>:!+\-*\/\\^&|@~]+/, "operator"],
+            [/[()[\]{}]/, "bracket"],
+          ],
+          string: [
+            [/[^"\\]+/, "string"],
+            [/\\./, "string.escape"],
+            [/"/, "string", "@pop"],
+          ],
+          blockComment: [
+            [/[^{-]+/, "comment"],
+            [/\{-/, "comment", "@push"],
+            [/-\}/, "comment", "@pop"],
+            [/[-{]/, "comment"],
+          ],
+          pragma: [
+            [/#-\}/, "keyword.control", "@pop"],
+            [/./, "keyword.control"],
+          ],
+        },
+      });
+
+      const rootfs = new PreopenDirectory("/", []);
+
+      const bsdtar_wasi = new WASI(
+        ["bsdtar.wasm", "-x"],
+        [],
+        [
+          new OpenFile(new File(new Uint8Array(), { readonly: true })),
+          ConsoleStdout.lineBuffered((msg) => console.info(msg)),
+          ConsoleStdout.lineBuffered((msg) => console.warn(msg)),
+          rootfs,
+        ],
+        { debug: false }
+      );
+
+      const [{ instance }, rootfs_bytes] = await Promise.all([
+        WebAssembly.instantiateStreaming(
+          fetch("https://haskell-wasm.github.io/bsdtar-wasm/bsdtar.wasm"),
+          { wasi_snapshot_preview1: bsdtar_wasi.wasiImport }
+        ),
+        fetch("./rootfs.tar.zst").then((r) => r.bytes()),
+      ]);
+
+      bsdtar_wasi.fds[0] = new OpenFile(
+        new File(rootfs_bytes, { readonly: true })
+      );
+      bsdtar_wasi.start(instance);
+
+      if (document.readyState === "loading") {
+        await new Promise((res) =>
+          document.addEventListener("DOMContentLoaded", res, { once: true })
+        );
+      }
+
+      document.getElementById("editor").innerHTML = "";
+      window.editor = monaco.editor.create(document.getElementById("editor"), {
+        value: `----------------------------------------------------------------------------
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase        #-}
+----------------------------------------------------------------------------
+module Main where
+----------------------------------------------------------------------------
+import           Miso
+import qualified Miso.CSS  as CSS
+import qualified Miso.Html as H
+import           Miso.Lens
+----------------------------------------------------------------------------
+-- | Application model
+type Model = Int
+----------------------------------------------------------------------------
+-- | Sum type for App events
+data Action
+  = AddOne
+  -- ^ Increment the counter
+  | SubtractOne
+  -- ^ Decrement the counter
+  | SayHelloWorld
+  -- ^ Show a greeting alert
+  deriving (Show, Eq)
+----------------------------------------------------------------------------
+-- | Entry point for a miso application
+main :: IO ()
+main = startApp defaultEvents app
+----------------------------------------------------------------------------
+-- | Application component, mounts into #app
+app :: App Model Action
+app = (vcomp emptyModel updateModel viewModel) { mountPoint = Just "app" }
+----------------------------------------------------------------------------
+-- | Initial application state
+emptyModel :: Model
+emptyModel = 0
+----------------------------------------------------------------------------
+-- | Updates model, optionally introduces side effects
+updateModel
+  :: Action
+  -> Effect parent props Model Action
+updateModel = \\case
+  AddOne        -> this += 1
+  SubtractOne   -> this -= 1
+  SayHelloWorld -> io_ (alert "Hello world" >> putStrLn "Hello World")
+----------------------------------------------------------------------------
+-- | Styled icon button
+iconBtn
+  :: Action
+  -- ^ Action to dispatch on click
+  -> MisoString
+  -- ^ Button label
+  -> View Model Action
+iconBtn action label =
+  H.button_
+    [ H.onClick action
+    , CSS.style_
+        [ CSS.fontSize "1.5rem"
+        , CSS.width "3rem"
+        , CSS.height "3rem"
+        , CSS.border "none"
+        , CSS.borderRadius "10px"
+        , CSS.backgroundColor (CSS.hex "1e293b")
+        , CSS.color (CSS.hex "e5e7eb")
+        , CSS.cursor "pointer"
+        , CSS.fontWeight "700"
+        ]
+    ]
+    [ text label ]
+----------------------------------------------------------------------------
+-- | Constructs a virtual DOM from a model
+viewModel
+  :: props
+  -> Model
+  -> View Model Action
+viewModel _ x =
+  H.div_
+    [ CSS.style_
+        [ CSS.display "flex"
+        , CSS.flexDirection "column"
+        , CSS.alignItems "center"
+        , CSS.gap "1.5rem"
+        , CSS.padding "2rem"
+        , CSS.fontFamily "system-ui, sans-serif"
+        ]
+    ]
+    [ H.span_
+        [ CSS.style_
+            [ CSS.fontSize "5rem"
+            , CSS.fontWeight "700"
+            , CSS.color (CSS.hex "22c55e")
+            , CSS.lineHeight "1"
+            , CSS.minWidth "4rem"
+            , CSS.textAlign "center"
+            ]
+        ]
+        [ text $ ms x ]
+    , H.div_
+        [ CSS.style_
+            [ CSS.display "flex"
+            , CSS.gap "0.75rem"
+            ]
+        ]
+        [ iconBtn SubtractOne "-"
+        , iconBtn AddOne      "+"
+        ]
+    , H.button_
+        [ H.onClick SayHelloWorld
+        , CSS.style_
+            [ CSS.padding "0.5rem 1.25rem"
+            , CSS.border "none"
+            , CSS.borderRadius "10px"
+            , CSS.backgroundColor (CSS.hex "22c55e")
+            , CSS.color (CSS.hex "fff")
+            , CSS.fontWeight "600"
+            , CSS.cursor "pointer"
+            , CSS.fontSize "0.9rem"
+            ]
+        ]
+        [ text "Say Hello World!" ]
+    ]
+----------------------------------------------------------------------------
+`,
+        language: "haskell",
+        automaticLayout: true,
+        minimap: { enabled: false },
+        theme: "vs-dark",
+        fontSize: 14,
+      });
+
+      const dyld = await main({
+        rpc: new DyLDBrowserHost({
+          rootfs,
+          stdout: (msg) => {
+            document.getElementById("stdout").value += `${msg}\n`;
+          },
+          stderr: (msg) => {
+            document.getElementById("stdout").value += `${msg}\n`;
+          },
+        }),
+        searchDirs: [
+          "/tmp/clib",
+          "/tmp/hslib/lib/wasm32-wasi-ghc-9.14.0.20251101-e4ad",
+        ],
+        mainSoPath: "/tmp/libplayground001.so",
+        args: ["libplayground001.so", "+RTS", "-c", "-RTS"],
+        isIserv: false,
+      });
+      const main_func = await dyld.exportFuncs.myMain("/tmp/hslib/lib");
+
+      document.getElementById("runBtn").addEventListener("click", async () => {
+        document.getElementById("runBtn").disabled = true;
+
+        try {
+          document.getElementById("stdout").value = "";
+          document.getElementById("app").innerHTML = "";
+
+          await main_func("-package miso -Wno-missed-extra-shared-lib", editor.getValue());
+        } finally {
+          document.getElementById("runBtn").disabled = false;
+        }
+      });
+
+      document.getElementById("runBtn").disabled = false;
+      document.getElementById("runBtn").textContent = "Run";
+      document.getElementById("app").innerHTML = "";
+    </script>
+  </head>
+  <body>
+    <div class="topbar">
+      <h1>Try miso 🍜</h1>
+      <p>A tasty Haskell web framework, running live in WebAssembly</p>
+    </div>
+    <div class="app">
+      <section class="pane">
+        <header>
+          🍜 Miso Source
+          <button id="runBtn" disabled="true">Loading…</button>
+        </header>
+        <div id="editor"><div class="loading">Loading rootfs…</div></div>
+      </section>
+
+      <section class="pane right">
+        <header>Output</header>
+        <div class="outputs">
+          <div id="app"><div class="loading">Loading WebAssembly runtime…</div></div>
+          <div class="label">stdout</div>
+          <textarea
+            id="stdout"
+            readonly
+            style="font-family: ui-monospace, Menlo, Consolas, monospace"
+          ></textarea>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
