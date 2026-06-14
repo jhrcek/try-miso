@@ -156,6 +156,32 @@
       } from "https://esm.sh/gh/haskell-wasm/browser_wasi_shim";
       import { DyLDBrowserHost, main } from "./dyld.mjs";
 
+      const isMobile = /Mobi|Android/i.test(navigator.userAgent) || window.innerWidth < 800;
+
+      if (isMobile) {
+        if (document.readyState === "loading") {
+          await new Promise(res => document.addEventListener("DOMContentLoaded", res, { once: true }));
+        }
+        await new Promise(res => {
+          const overlay = Object.assign(document.createElement("div"), {
+            style: "position:fixed;inset:0;background:#0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:2rem;z-index:9999;text-align:center",
+            innerHTML: `
+              <p style="color:#e5e7eb;font-size:0.95rem;max-width:28rem;margin:0;line-height:1.6">
+                This playground loads several hundred MB of WebAssembly and may crash on mobile browsers.
+              </p>
+              <button id="tryAnywayBtn" style="background:#22c55e;border:none;border-radius:8px;padding:0.5rem 1.25rem;font-weight:600;font-size:0.9rem;cursor:pointer">
+                Try anyway
+              </button>
+            `,
+          });
+          document.body.appendChild(overlay);
+          document.getElementById("tryAnywayBtn").addEventListener("click", () => {
+            overlay.remove();
+            res();
+          });
+        });
+      }
+
       monaco.languages.register({ id: "haskell" });
       monaco.languages.setMonarchTokensProvider("haskell", {
         keywords: [
