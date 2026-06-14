@@ -1,10 +1,12 @@
 # :ramen: try miso
 
-See [live](https://try.haskell-miso.org)
-
 <a href="https://try.haskell-miso.org">
   <img width="1248" height="593" alt="image" src="https://github.com/user-attachments/assets/b1d24f3b-f00c-4626-87c9-5252270f93c7" />
 </a>
+
+## Intro
+
+See [live](https://try.haskell-miso.org)
 
 An interactive [miso](https://haskell-miso.org) playground running entirely in the browser. Write Haskell, click **Run**, and see your miso app rendered live — no install required. Powered by GHC compiled to WebAssembly.
 
