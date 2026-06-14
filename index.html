@@ -322,6 +322,14 @@
         "let", "in", "do", "case", "of", "if", "then", "else",
         "infixl", "infixr", "infix", "forall", "foreign",
       ];
+      const hsSnippets = [
+        { label: "data…",     detail: "data type",      body: "data ${1:Type} = ${2:Con}\n  deriving (${3:Show, Eq})" },
+        { label: "newtype…",  detail: "newtype",         body: "newtype ${1:Type} = ${1:Type} { un${1:Type} :: ${2:Inner} }" },
+        { label: "instance…", detail: "instance",        body: "instance ${1:Class} ${2:Type} where\n  ${0}" },
+        { label: "case…of",   detail: "case expression", body: "case ${1:expr} of\n  ${2:_} -> ${0}" },
+        { label: "do…",       detail: "do block",        body: "do\n  ${0}" },
+        { label: "\\…->",     detail: "lambda",          body: "\\${1:x} -> ${0}" },
+      ];
       monaco.languages.registerCompletionItemProvider("haskell", {
         triggerCharacters: ["."],
         provideCompletionItems(model, position) {
@@ -333,20 +341,21 @@
             endColumn:       word.endColumn,
           };
 
-          // On an import line, offer module names instead of symbols
+          // On an import line, offer module names (works mid-word and after a dot)
           const linePrefix = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
-          const importPrefixMatch = linePrefix.match(/^\s*import\s+(?:qualified\s+)?([A-Z][a-zA-Z0-9_.]*)\.$/);
-          if (importPrefixMatch) {
-            const modPrefix = importPrefixMatch[1] + ".";
-            const moduleNames = [...new Set(completions.map(c => c.module))].sort();
+          const importLineMatch = linePrefix.match(/^\s*import\s+(?:qualified\s+)?([A-Z][a-zA-Z0-9_.]*)$/);
+          if (importLineMatch) {
+            const modPrefix   = importLineMatch[1];
+            const insertStart = modPrefix.lastIndexOf(".") + 1;
+            const allMods     = [...new Set(completions.map(c => c.module))].sort();
             return {
-              suggestions: moduleNames
+              suggestions: allMods
                 .filter(m => m.startsWith(modPrefix))
                 .map(m => ({
                   label:      m,
                   kind:       monaco.languages.CompletionItemKind.Module,
                   detail:     "module",
-                  insertText: m.slice(modPrefix.length),
+                  insertText: m.slice(insertStart),
                   range,
                 })),
             };
@@ -386,9 +395,37 @@
             range,
           }));
 
+          // Snippets for common Haskell patterns
+          const snippetSuggestions = qualifier ? [] : hsSnippets.map(s => ({
+            label:           s.label,
+            kind:            monaco.languages.CompletionItemKind.Snippet,
+            detail:          s.detail,
+            insertText:      s.body,
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            range,
+          }));
+
+          // Locally-defined names extracted from the current file
+          const localSuggestions = qualifier ? [] : (() => {
+            const seen = new Set();
+            const items = [];
+            const add = (n, k) => { if (!seen.has(n)) { seen.add(n); items.push({ n, k }); } };
+            for (const [, n] of text.matchAll(/^(?:data|newtype|type)\s+([A-Z][a-zA-Z0-9_']*)/gm))
+              add(n, monaco.languages.CompletionItemKind.Struct);
+            for (const [, n] of text.matchAll(/(?:^|\|\s+)([A-Z][a-zA-Z0-9_']*)/gm))
+              add(n, monaco.languages.CompletionItemKind.EnumMember);
+            for (const [, n] of text.matchAll(/^([a-z_][a-zA-Z0-9_']*)\s*(?:::|[a-zA-Z_(])/gm))
+              add(n, monaco.languages.CompletionItemKind.Function);
+            return items.map(({ n, k }) => ({
+              label: n, kind: k, detail: "local", insertText: n, range,
+            }));
+          })();
+
           return {
             suggestions: [
               ...kwSuggestions,
+              ...snippetSuggestions,
+              ...localSuggestions,
               ...libSuggestions.map(c => ({
                 label:         c.name,
                 kind:          kindMap[c.kind] ?? monaco.languages.CompletionItemKind.Function,
@@ -591,6 +628,11 @@ orbitDot dur color sz offset playState =
         theme: "vs-dark",
         fontSize: 14,
       });
+
+      window.editor.addCommand(
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+        () => document.getElementById("runBtn").click(),
+      );
 
       let stderrLines = [];
 
