@@ -404,6 +404,33 @@
         },
       });
 
+      monaco.languages.registerHoverProvider("haskell", {
+        provideHover(model, position) {
+          const word = model.getWordAtPosition(position);
+          if (!word) return null;
+          const matches = completions.filter(c => c.name === word.word);
+          if (matches.length === 0) return null;
+          const contents = [];
+          for (const c of matches) {
+            if (c.type) {
+              contents.push({ value: "```haskell\n" + c.name + " :: " + c.type + "\n```" });
+            }
+            const meta = [
+              c.module && `**${c.module}**`,
+              c.kind   && `*${c.kind}*`,
+            ].filter(Boolean).join(" · ");
+            if (meta) contents.push({ value: meta });
+          }
+          return {
+            range: new monaco.Range(
+              position.lineNumber, word.startColumn,
+              position.lineNumber, word.endColumn,
+            ),
+            contents,
+          };
+        },
+      });
+
       window.editor = monaco.editor.create(document.getElementById("editor"), {
         value: `----------------------------------------------------------------------------
 {-# LANGUAGE OverloadedStrings #-}
