@@ -87,9 +87,20 @@ mkdir -p "$BUILD_DIR/proj" "$STORE_DIR"
 
 cat > "$BUILD_DIR/proj/cabal.project" <<EOF
 packages: .
+
+allow-newer:
+  all:base
+
 package *
   shared: True
   library-for-ghci: False
+
+source-repository-package
+  type: git
+  location: https://github.com/dmjio/miso
+  tag: 1.11.0
+
+flags: +template-haskell
 EOF
 cat > "$BUILD_DIR/proj/pkgs.cabal" <<EOF
 cabal-version: 3.0
