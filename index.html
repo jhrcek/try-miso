@@ -230,14 +230,16 @@
         });
       }
 
+      const hsKeywords = [
+        "module", "where", "import", "qualified", "as", "hiding",
+        "data", "newtype", "type", "class", "instance", "deriving",
+        "let", "in", "do", "case", "of", "if", "then", "else",
+        "infixl", "infixr", "infix", "forall", "foreign",
+      ];
+
       monaco.languages.register({ id: "haskell" });
       monaco.languages.setMonarchTokensProvider("haskell", {
-        keywords: [
-          "module", "where", "import", "qualified", "as", "hiding",
-          "data", "newtype", "type", "class", "instance", "deriving",
-          "let", "in", "do", "case", "of", "if", "then", "else",
-          "infixl", "infixr", "infix", "forall", "foreign",
-        ],
+        keywords: hsKeywords,
         tokenizer: {
           root: [
             [/\{-#/, "keyword.control", "@pragma"],
@@ -316,12 +318,6 @@
         typeclass:   monaco.languages.CompletionItemKind.Interface,
         operator:    monaco.languages.CompletionItemKind.Operator,
       };
-      const hsKeywords = [
-        "module", "where", "import", "qualified", "as", "hiding",
-        "data", "newtype", "type", "class", "instance", "deriving",
-        "let", "in", "do", "case", "of", "if", "then", "else",
-        "infixl", "infixr", "infix", "forall", "foreign",
-      ];
       const hsSnippets = [
         { label: "data…",     detail: "data type",      body: "data ${1:Type} = ${2:Con}\n  deriving (${3:Show, Eq})" },
         { label: "newtype…",  detail: "newtype",         body: "newtype ${1:Type} = ${1:Type} { un${1:Type} :: ${2:Inner} }" },
@@ -708,8 +704,9 @@ orbitDot dur color sz offset playState =
         return markers;
       }
 
-      document.getElementById("runBtn").addEventListener("click", async () => {
-        document.getElementById("runBtn").disabled = true;
+      const runBtn = document.getElementById("runBtn");
+      runBtn.addEventListener("click", async () => {
+        runBtn.disabled = true;
         stderrLines = [];
         monaco.editor.setModelMarkers(window.editor.getModel(), "ghc", []);
 
@@ -723,14 +720,18 @@ orbitDot dur color sz offset playState =
             window.editor.getModel(), "ghc",
             parseGhcDiagnostics(stderrLines),
           );
-          document.getElementById("runBtn").disabled = false;
+          runBtn.disabled = false;
         }
       });
 
-      document.getElementById("runBtn").disabled = false;
-      document.getElementById("runBtn").textContent = "Run";
+      runBtn.disabled = false;
+      runBtn.textContent = "Run";
+      const platform = navigator.userAgentData?.platform || navigator.platform || "";
+      const isMac = /mac|iphone|ipad|ipod/i.test(platform);
+      runBtn.title = isMac ? "⌘ + Enter" : "Ctrl + Enter";
+      runBtn.setAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter");
       document.getElementById("app").innerHTML = "";
-      document.getElementById("runBtn").click();
+      runBtn.click();
 
       // Draggable splitter between left and right panes
       const splitter = document.getElementById("splitter");
