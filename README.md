@@ -1,4 +1,4 @@
-# :ramen: try miso
+# 🥡 try miso
 
 <a href="https://try.haskell-miso.org">
   <img width="1256" height="794" alt="image" src="https://github.com/user-attachments/assets/efa78724-0bba-4c0a-aad5-db95f6e5dced" />
