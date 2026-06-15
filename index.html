@@ -258,7 +258,22 @@
         font-size: 0.85rem;
         opacity: 0.8;
         margin: 0.35rem 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
       }
+      .clear-btn {
+        display: flex;
+        align-items: center;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #6b7280;
+        padding: 0;
+        line-height: 1;
+        transition: color 0.15s;
+      }
+      .clear-btn:hover { color: #e5e7eb; }
       .outputs textarea {
         flex: 1;
         min-height: 0;
@@ -996,6 +1011,10 @@ orbitDot dur color sz offset playState =
         document.addEventListener("mouseup", onUp);
       });
 
+      document.getElementById("clearStdoutBtn").addEventListener("click", () => {
+        document.getElementById("stdout").value = "";
+      });
+
       document.getElementById("fullscreenBtn").addEventListener("click", () => {
         if (!document.fullscreenElement) {
           document.documentElement.requestFullscreen();
@@ -1050,7 +1069,14 @@ orbitDot dur color sz offset playState =
           <div id="app"><div class="loading">Loading WebAssembly runtime…</div></div>
           <div class="row-splitter" id="rowSplitter"></div>
           <div class="stdout-wrap" id="stdoutSection">
-            <div class="label">stdout</div>
+            <div class="label">
+              stdout
+              <button class="clear-btn" id="clearStdoutBtn" title="Clear stdout" aria-label="Clear stdout">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                </svg>
+              </button>
+            </div>
             <textarea
               id="stdout"
               readonly
