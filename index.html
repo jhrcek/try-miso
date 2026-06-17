@@ -394,6 +394,98 @@
         gap: 0.25rem;
         align-items: center;
       }
+      .problems-panel {
+        flex: 0 0 auto;
+        border-top: 1px solid #1f2937;
+      }
+      .problems-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.3rem 0.75rem;
+        font-size: 0.78rem;
+        color: #9ca3af;
+        cursor: pointer;
+        user-select: none;
+      }
+      .problems-header:hover { color: #e5e7eb; }
+      .problems-title { flex: 1; }
+      .problems-list {
+        display: none;
+        overflow-y: auto;
+        max-height: 140px;
+      }
+      .problems-panel.open .problems-list { display: block; }
+      .problem-item {
+        padding: 0.2rem 0.75rem;
+        font-size: 0.76rem;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        cursor: pointer;
+        display: flex;
+        gap: 0.5rem;
+        align-items: baseline;
+        min-width: 0;
+      }
+      .problem-item:hover { background: #1f2937; }
+      .problem-item .problem-icon { flex-shrink: 0; }
+      .problem-item .problem-loc { color: #6b7280; white-space: nowrap; flex-shrink: 0; }
+      .problem-item .problem-msg { color: #d1d5db; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .problem-item.error .problem-icon { color: #f87171; }
+      .problem-item.warning .problem-icon { color: #fbbf24; }
+      .shortcuts-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.65);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+      }
+      .shortcuts-modal-overlay.open { display: flex; }
+      .shortcuts-modal {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 14px;
+        padding: 1.5rem;
+        max-width: 420px;
+        width: 90%;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      .shortcuts-modal h2 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #e5e7eb;
+      }
+      .shortcuts-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .shortcuts-table {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.5rem 1.25rem;
+      }
+      .shortcut-key {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        color: #e5e7eb;
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 5px;
+        padding: 0.15rem 0.5rem;
+        white-space: nowrap;
+        justify-self: start;
+        align-self: center;
+        font-size: 0.78rem;
+      }
+      .shortcut-desc {
+        color: #9ca3af;
+        align-self: center;
+        font-size: 0.85rem;
+      }
     </style>
 
     <script>
@@ -525,12 +617,27 @@
         { debug: false }
       );
 
+      const rootfsResp = await fetch("./rootfs.tar.zst");
+      if (!rootfsResp.ok) {
+        document.getElementById("editor").innerHTML = "";
+        document.getElementById("app").innerHTML =
+          `<div style="padding:1.5rem;color:#f87171;font-family:ui-monospace,monospace;font-size:0.85rem;line-height:1.7">
+            <strong>rootfs.tar.zst not found (HTTP ${rootfsResp.status})</strong><br>
+            Build it first:<br>
+            <code style="color:#86efac">./build-root.sh</code><br><br>
+            Then serve the directory with a static file server, e.g.:<br>
+            <code style="color:#86efac">python3 -m http.server</code>
+          </div>`;
+        document.getElementById("runBtn").textContent = "rootfs missing";
+        throw new Error("rootfs.tar.zst not found — run ./build-root.sh first");
+      }
+
       const [{ instance }, rootfs_bytes] = await Promise.all([
         WebAssembly.instantiateStreaming(
           fetch("https://haskell-wasm.github.io/bsdtar-wasm/bsdtar.wasm"),
           { wasi_snapshot_preview1: bsdtar_wasi.wasiImport }
         ),
-        fetch("./rootfs.tar.zst").then((r) => r.bytes()),
+        rootfsResp.bytes(),
       ]);
 
       bsdtar_wasi.fds[0] = new OpenFile(
@@ -1587,13 +1694,14 @@ restartBtn =
 
       const savedFontSize = parseInt(localStorage.getItem('miso-pg-fontSize') || '14', 10);
       const savedFontFamily = localStorage.getItem('miso-pg-fontFamily') || "'Fira Code', monospace";
+      const savedTheme = localStorage.getItem('miso-pg-theme') || 'vs-dark';
 
       window.editor = monaco.editor.create(document.getElementById("editor"), {
         value: initialSource,
         language: "haskell",
         automaticLayout: true,
         minimap: { enabled: false },
-        theme: "vs-dark",
+        theme: savedTheme,
         fontSize: savedFontSize,
         fontFamily: savedFontFamily,
         fontLigatures: savedFontFamily !== 'ui-monospace, Menlo, Consolas, monospace',
@@ -1724,6 +1832,50 @@ restartBtn =
         return markers;
       }
 
+      function updateProblemsPanel(markers) {
+        const panel   = document.getElementById('problemsPanel');
+        const list    = document.getElementById('problemsList');
+        const title   = document.getElementById('problemsTitle');
+        const chevron = document.getElementById('problemsChevron');
+        const errors   = markers.filter(m => m.severity === monaco.MarkerSeverity.Error).length;
+        const warnings = markers.filter(m => m.severity === monaco.MarkerSeverity.Warning).length;
+        list.innerHTML = '';
+        if (markers.length === 0) {
+          title.textContent = 'Problems';
+          panel.classList.remove('open');
+          chevron.textContent = '▸';
+          return;
+        }
+        const parts = [];
+        if (errors)   parts.push(`${errors} error${errors !== 1 ? 's' : ''}`);
+        if (warnings) parts.push(`${warnings} warning${warnings !== 1 ? 's' : ''}`);
+        title.textContent = `Problems — ${parts.join(', ')}`;
+        panel.classList.add('open');
+        chevron.textContent = '▾';
+        for (const m of markers) {
+          const isError = m.severity === monaco.MarkerSeverity.Error;
+          const item = document.createElement('div');
+          item.className = `problem-item ${isError ? 'error' : 'warning'}`;
+          const icon = document.createElement('span');
+          icon.className = 'problem-icon';
+          icon.textContent = isError ? '●' : '▲';
+          const loc = document.createElement('span');
+          loc.className = 'problem-loc';
+          loc.textContent = `${m.startLineNumber}:${m.startColumn}`;
+          const msg = document.createElement('span');
+          msg.className = 'problem-msg';
+          msg.textContent = m.message.replace(/\n/g, ' ');
+          msg.title = m.message;
+          item.append(icon, loc, msg);
+          item.addEventListener('click', () => {
+            window.editor.setPosition({ lineNumber: m.startLineNumber, column: m.startColumn });
+            window.editor.revealLineInCenter(m.startLineNumber);
+            window.editor.focus();
+          });
+          list.appendChild(item);
+        }
+      }
+
       const runBtn = document.getElementById("runBtn");
       runBtn.addEventListener("click", async () => {
         runBtn.disabled = true;
@@ -1736,10 +1888,9 @@ restartBtn =
 
           await main_func("-package miso -Wno-missed-extra-shared-lib", editor.getValue());
         } finally {
-          monaco.editor.setModelMarkers(
-            window.editor.getModel(), "ghc",
-            parseGhcDiagnostics(stderrLines),
-          );
+          const markers = parseGhcDiagnostics(stderrLines);
+          monaco.editor.setModelMarkers(window.editor.getModel(), "ghc", markers);
+          updateProblemsPanel(markers);
           runBtn.disabled = false;
         }
       });
@@ -1846,6 +1997,34 @@ restartBtn =
         document.getElementById("fsEnterIcon").style.display = inFs ? "none" : "";
         document.getElementById("fsExitIcon").style.display = inFs ? "" : "none";
       });
+
+      // Theme picker
+      const themePicker = document.getElementById('themePicker');
+      themePicker.value = savedTheme;
+      themePicker.addEventListener('change', () => {
+        monaco.editor.setTheme(themePicker.value);
+        localStorage.setItem('miso-pg-theme', themePicker.value);
+      });
+
+      // Problems panel toggle
+      document.getElementById('problemsHeader').addEventListener('click', () => {
+        const panel   = document.getElementById('problemsPanel');
+        const chevron = document.getElementById('problemsChevron');
+        panel.classList.toggle('open');
+        chevron.textContent = panel.classList.contains('open') ? '▾' : '▸';
+      });
+
+      // Shortcuts modal
+      const shortcutsModal = document.getElementById('shortcutsModal');
+      document.getElementById('shortcutsBtn').addEventListener('click', () => {
+        shortcutsModal.classList.add('open');
+      });
+      document.getElementById('closeShortcutsModal').addEventListener('click', () => {
+        shortcutsModal.classList.remove('open');
+      });
+      shortcutsModal.addEventListener('click', e => {
+        if (e.target === shortcutsModal) shortcutsModal.classList.remove('open');
+      });
     </script>
   </head>
   <body>
@@ -1857,6 +2036,7 @@ restartBtn =
           <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
         </svg>
       </a>
+      <button class="topbar-fullscreen" id="shortcutsBtn" aria-label="Keyboard shortcuts" title="Keyboard shortcuts" style="font-size:0.9rem;font-weight:700;">?</button>
       <button class="topbar-fullscreen" id="fullscreenBtn" aria-label="Toggle fullscreen">
         <svg id="fsEnterIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
@@ -1905,10 +2085,23 @@ restartBtn =
                 </svg>
               </button>
               <button id="downloadBtn" class="editor-ctrl-btn" title="Download source as .hs file">⬇ .hs</button>
+              <div class="editor-ctrl-divider"></div>
+              <select id="themePicker" class="editor-ctrl-select" aria-label="Editor theme" title="Editor theme" style="max-width:7.5rem">
+                <option value="vs-dark">Dark</option>
+                <option value="vs">Light</option>
+                <option value="hc-black">High Contrast</option>
+              </select>
             </div>
           </div>
         </header>
         <div id="editor"><div class="loading">Loading rootfs…</div></div>
+        <div class="problems-panel" id="problemsPanel">
+          <div class="problems-header" id="problemsHeader">
+            <span class="problems-title" id="problemsTitle">Problems</span>
+            <span id="problemsChevron">▸</span>
+          </div>
+          <div class="problems-list" id="problemsList"></div>
+        </div>
       </section>
 
       <div class="splitter" id="splitter"></div>
@@ -1946,6 +2139,24 @@ restartBtn =
         <div class="share-url-row">
           <input id="shareUrl" type="text" readonly />
           <button class="copy-btn" id="copyShareUrl">Copy</button>
+        </div>
+      </div>
+    </div>
+    <div class="shortcuts-modal-overlay" id="shortcutsModal">
+      <div class="shortcuts-modal">
+        <div class="shortcuts-modal-header">
+          <h2>Keyboard Shortcuts</h2>
+          <button class="close-btn" id="closeShortcutsModal">&times;</button>
+        </div>
+        <div class="shortcuts-table">
+          <span class="shortcut-key">⌘ / Ctrl + Enter</span><span class="shortcut-desc">Run code</span>
+          <span class="shortcut-key">⌘ / Ctrl + F</span><span class="shortcut-desc">Find</span>
+          <span class="shortcut-key">⌘ / Ctrl + H</span><span class="shortcut-desc">Find &amp; replace</span>
+          <span class="shortcut-key">⌘ / Ctrl + /</span><span class="shortcut-desc">Toggle line comment</span>
+          <span class="shortcut-key">⌘ / Ctrl + Z</span><span class="shortcut-desc">Undo</span>
+          <span class="shortcut-key">Alt + ↑ / ↓</span><span class="shortcut-desc">Move line up / down</span>
+          <span class="shortcut-key">⌘ / Ctrl + D</span><span class="shortcut-desc">Select next occurrence</span>
+          <span class="shortcut-key">F1</span><span class="shortcut-desc">Command palette</span>
         </div>
       </div>
     </div>
