@@ -98,7 +98,7 @@ package *
 source-repository-package
   type: git
   location: https://github.com/dmjio/miso
-  tag: 2c684bfaa11cb9a80344170cdb2aafcb96a06f36
+  tag: 1.11.0
 
 flags: +template-haskell
 EOF
